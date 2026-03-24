@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  ai-service:
+    build:
+      context: ./services/ai-service
+    environment:
+      AI_SERVICE_PORT: ${AI_SERVICE_PORT}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+    ports:
+      - "${AI_SERVICE_PORT}:8000"
+
+  content-service:
+    build:
+      context: ./services/content-service
+    environment:
+      PORT: ${CONTENT_SERVICE_PORT}
+      AI_SERVICE_URL: http://ai-service:8000
+      POSTGRES_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017
+    depends_on:
+      - postgres
+      - mongo
+      - ai-service
+    ports:
+      - "${CONTENT_SERVICE_PORT}:4100"
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    environment:
+      PORT: ${API_GATEWAY_PORT}
+      CONTENT_SERVICE_URL: http://content-service:4100
+    depends_on:
+      - content-service
+    ports:
+      - "${API_GATEWAY_PORT}:4000"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    depends_on:
+      - api-gateway
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres-data:
+  mongo-data:

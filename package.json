@@ -1,0 +1,16 @@
+{
+  "name": "contextra",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @contextra/web",
+    "dev:gateway": "npm run dev --workspace @contextra/api-gateway",
+    "dev:content": "npm run dev --workspace @contextra/content-service",
+    "build": "npm run build --workspaces --if-present"
+  }
+}
+
