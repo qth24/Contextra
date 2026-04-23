@@ -70,6 +70,20 @@ export class ProjectController {
     response.json(project);
   };
 
+  updateSettings = async (request: Request, response: Response) => {
+    const project = await this.projectService.updateSettings(getParam(request, "projectId"), getUser(response).id, {
+      mode: request.body?.mode === "team" ? "team" : "personal",
+      isPublic: Boolean(request.body?.isPublic),
+      coverImageUrl: request.body?.coverImageUrl ? String(request.body.coverImageUrl) : undefined,
+    });
+    if (!project) {
+      response.status(404).json({ message: "Project not found" });
+      return;
+    }
+
+    response.json(project);
+  };
+
   upsertCollaborator = async (request: Request, response: Response) => {
     try {
       const { friendUserId, permissionLevel } = request.body;
@@ -97,15 +111,13 @@ export class ProjectController {
   };
 
   upsertCharacter = async (request: Request, response: Response) => {
-    const { name, role, goals, traits, memory } = request.body;
+    const { name, role, memory } = request.body;
     const project = await this.projectService.upsertCharacter(
       getParam(request, "projectId"),
       getUser(response).id,
       {
         name,
         role,
-        goals,
-        traits: Array.isArray(traits) ? traits : [],
         memory,
       },
       getParam(request, "characterId"),
@@ -135,6 +147,21 @@ export class ProjectController {
     response.status(201).json(project);
   };
 
+  deleteBranch = async (request: Request, response: Response) => {
+    const project = await this.projectService.deleteBranch(
+      getParam(request, "projectId"),
+      getUser(response).id,
+      getParam(request, "branchId"),
+    );
+
+    if (!project) {
+      response.status(404).json({ message: "Project not found" });
+      return;
+    }
+
+    response.json(project);
+  };
+
   mergeBranch = async (request: Request, response: Response) => {
     const project = await this.projectService.mergeBranch(
       getParam(request, "projectId"),
@@ -158,6 +185,38 @@ export class ProjectController {
       title,
       content,
       summary,
+    );
+
+    if (!project) {
+      response.status(404).json({ message: "Project not found" });
+      return;
+    }
+
+    response.json(project);
+  };
+
+  createChapter = async (request: Request, response: Response) => {
+    const { title, content, summary, branchId } = request.body;
+    const project = await this.projectService.createChapter(getParam(request, "projectId"), getUser(response).id, {
+      title,
+      content,
+      summary,
+      branchId,
+    });
+
+    if (!project) {
+      response.status(404).json({ message: "Project not found" });
+      return;
+    }
+
+    response.status(201).json(project);
+  };
+
+  deleteChapter = async (request: Request, response: Response) => {
+    const project = await this.projectService.deleteChapter(
+      getParam(request, "projectId"),
+      getUser(response).id,
+      getParam(request, "chapterId"),
     );
 
     if (!project) {
@@ -261,25 +320,5 @@ export class ProjectController {
 
     response.setHeader("Content-Type", "text/plain; charset=utf-8");
     response.send(output);
-  };
-
-  synthesizeSpeech = async (request: Request, response: Response) => {
-    const text = String(request.body?.text || "").trim();
-    const language = String(request.body?.language || "vi").toLowerCase().startsWith("en") ? "en" : "vi";
-
-    if (!text) {
-      response.status(400).json({ message: "Text is required for TTS" });
-      return;
-    }
-
-    try {
-      const audio = await this.projectService.synthesizeSpeech(text, language);
-      response.setHeader("Content-Type", "audio/mpeg");
-      response.send(audio);
-    } catch (error) {
-      response.status(502).json({
-        message: error instanceof Error ? error.message : "TTS generation failed",
-      });
-    }
   };
 }

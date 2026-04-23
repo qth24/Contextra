@@ -19,6 +19,7 @@ export interface ProjectSummary {
   genre: string;
   summary: string;
   isPublic: boolean;
+  coverImageUrl?: string;
   updatedAt: string;
   chapterCount: number;
   activeBranches: number;
@@ -38,6 +39,7 @@ export interface PublicProjectSummary {
   summary: string;
   genre: string;
   ownerName: string;
+  coverImageUrl?: string;
   updatedAt: string;
 }
 
@@ -49,6 +51,7 @@ export interface HomeOverview {
     genre: string;
     updatedAt: string;
     isPublic: boolean;
+    coverImageUrl?: string;
   }>;
   publicProjects: PublicProjectSummary[];
 }
@@ -99,10 +102,25 @@ export interface CharacterProfile {
   id: string;
   name: string;
   role: string;
-  goals: string;
-  traits: string[];
   memory: string;
+  goals?: string;
+  traits?: string[];
   updatedAt: string;
+}
+
+export interface ChapterAIContextSnapshot {
+  branchName: string;
+  projectSummary: string;
+  tone: string;
+  audience: string;
+  sharedNotes: string;
+  worldRules: string[];
+  characterDigest: string;
+  recentChapters: string[];
+  instructions: string;
+  actor: string;
+  model?: string;
+  generatedAt: string;
 }
 
 export interface Chapter {
@@ -112,6 +130,8 @@ export interface Chapter {
   branchId: string;
   summary: string;
   content: string;
+  source?: "manual" | "ai";
+  aiContext?: ChapterAIContextSnapshot;
   createdAt: string;
 }
 
@@ -159,6 +179,7 @@ export interface ProjectDocument {
     genre: string;
     summary: string;
     isPublic: boolean;
+    coverImageUrl?: string;
     createdAt: string;
     updatedAt: string;
   };
@@ -245,35 +266,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
-}
-
-async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
-  const token = authStorage.getToken();
-  const headers = new Headers(init?.headers || {});
-  if (!headers.has("Content-Type") && init?.body) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
-
-  if (!response.ok) {
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const payload = (await response.json()) as { message?: string; detail?: string };
-      throw new Error(payload.message || payload.detail || "API request failed");
-    }
-
-    const text = await response.text();
-    throw new Error(text || "API request failed");
-  }
-
-  return response.blob();
 }
 
 export const api = {
@@ -366,6 +358,18 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ isPublic }),
     }),
+  updateProjectSettings: (
+    projectId: string,
+    payload: {
+      mode: "personal" | "team";
+      isPublic: boolean;
+      coverImageUrl?: string;
+    },
+  ) =>
+    request<ProjectDocument>(`/projects/${projectId}/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   addCollaborator: (
     projectId: string,
     payload: {
@@ -382,12 +386,23 @@ export const api = {
     payload: {
       name: string;
       role: string;
-      goals: string;
-      traits: string[];
       memory: string;
     },
   ) =>
     request<ProjectDocument>(`/projects/${projectId}/characters`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createChapter: (
+    projectId: string,
+    payload: {
+      title: string;
+      summary: string;
+      content: string;
+      branchId: string;
+    },
+  ) =>
+    request<ProjectDocument>(`/projects/${projectId}/chapters`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -441,6 +456,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  deleteBranch: (projectId: string, branchId: string) =>
+    request<ProjectDocument>(`/projects/${projectId}/branches/${branchId}`, {
+      method: "DELETE",
+    }),
   mergeBranch: (projectId: string, branchId: string) =>
     request<ProjectDocument>(`/projects/${projectId}/branches/${branchId}/merge`, {
       method: "POST",
@@ -462,10 +481,9 @@ export const api = {
     request<ProjectDocument>(`/projects/${projectId}/restore/${versionId}`, {
       method: "POST",
     }),
-  exportProject: (projectId: string) => request<string>(`/projects/${projectId}/export`),
-  synthesizeSpeech: (payload: { text: string; language: "vi" | "en" }) =>
-    requestBlob("/tts", {
-      method: "POST",
-      body: JSON.stringify(payload),
+  deleteChapter: (projectId: string, chapterId: string) =>
+    request<ProjectDocument>(`/projects/${projectId}/chapters/${chapterId}`, {
+      method: "DELETE",
     }),
+  exportProject: (projectId: string) => request<string>(`/projects/${projectId}/export`),
 };

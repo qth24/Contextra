@@ -1,5 +1,7 @@
 import {
+  ChapterAIContextSnapshot,
   Collaborator,
+  CreateChapterInput,
   CreateBranchInput,
   CreateProjectInput,
   GeneratedChapterPayload,
@@ -13,6 +15,7 @@ import {
   ProjectSnapshotState,
   PublicUser,
   UpdateContextInput,
+  UpdateProjectSettingsInput,
   UpdateProjectVisibilityInput,
   UpsertCharacterInput,
   UsageEntry,
@@ -72,14 +75,15 @@ export class InMemoryProjectRepository {
       name: string;
       mode: ProjectDocument["metadata"]["mode"];
       genre: string;
-      summary: string;
-      updatedAt: string;
-      chapterCount: number;
-      activeBranches: number;
-      collaboratorCount: number;
-      role: string;
-      isPublic: boolean;
-    }>
+        summary: string;
+        updatedAt: string;
+        chapterCount: number;
+        activeBranches: number;
+        collaboratorCount: number;
+        role: string;
+        isPublic: boolean;
+        coverImageUrl?: string;
+      }>
   > {
     const projects = await this.loadAllProjects();
     return projects
@@ -99,6 +103,7 @@ export class InMemoryProjectRepository {
           collaboratorCount: project.collaborators.length,
           role: membership?.role ?? "public-viewer",
           isPublic: project.metadata.isPublic,
+          coverImageUrl: project.metadata.coverImageUrl,
         };
       });
   }
@@ -116,6 +121,7 @@ export class InMemoryProjectRepository {
         genre: project.metadata.genre,
         ownerName: project.collaborators.find((item: Collaborator) => item.role === "owner")?.name || "Unknown author",
         updatedAt: project.metadata.updatedAt,
+        coverImageUrl: project.metadata.coverImageUrl,
       }));
   }
 
@@ -127,6 +133,7 @@ export class InMemoryProjectRepository {
       genre: project.genre,
       updatedAt: project.updatedAt,
       isPublic: project.isPublic,
+      coverImageUrl: project.coverImageUrl,
     }));
 
     return {
@@ -155,6 +162,7 @@ export class InMemoryProjectRepository {
         genre: input.genre,
         summary: input.summary,
         isPublic: false,
+        coverImageUrl: input.coverImageUrl,
         createdAt: now,
         updatedAt: now,
       },
@@ -212,6 +220,18 @@ export class InMemoryProjectRepository {
     });
   }
 
+  updateSettings(projectId: string, userId: string, input: UpdateProjectSettingsInput) {
+    return this.mutate(projectId, userId, 3, "Project settings updated", (project) => {
+      project.metadata.mode = input.mode;
+      project.metadata.isPublic = input.isPublic;
+      project.metadata.coverImageUrl = input.coverImageUrl;
+
+      if (input.mode === "personal") {
+        project.collaborators = project.collaborators.filter((item) => item.role === "owner");
+      }
+    });
+  }
+
   upsertCollaborator(projectId: string, userId: string, collaborator: Collaborator, collaboratorId?: string) {
     const label = collaboratorId ? "Collaborator updated" : "Collaborator added";
     return this.mutate(projectId, userId, 3, label, (project) => {
@@ -258,8 +278,6 @@ export class InMemoryProjectRepository {
 
         current.name = input.name;
         current.role = input.role;
-        current.goals = input.goals;
-        current.traits = input.traits;
         current.memory = input.memory;
         current.updatedAt = now;
         return;
@@ -269,6 +287,25 @@ export class InMemoryProjectRepository {
         id: crypto.randomUUID(),
         ...input,
         updatedAt: now,
+      });
+    });
+  }
+
+  createChapter(projectId: string, userId: string, input: CreateChapterInput) {
+    return this.mutate(projectId, userId, 2, `Chapter added: ${input.title}`, (project) => {
+      if (!project.branches.some((branch) => branch.id === input.branchId)) {
+        throw new Error("Branch not found");
+      }
+
+      project.chapters.push({
+        id: crypto.randomUUID(),
+        title: input.title,
+        summary: input.summary,
+        content: input.content,
+        branchId: input.branchId,
+        index: project.chapters.length + 1,
+        source: "manual",
+        createdAt: new Date().toISOString(),
       });
     });
   }
@@ -287,6 +324,22 @@ export class InMemoryProjectRepository {
     });
   }
 
+  deleteBranch(projectId: string, userId: string, branchId: string) {
+    return this.mutate(projectId, userId, 3, "Branch deleted", (project) => {
+      if (branchId === "main") {
+        throw new Error("Main branch cannot be deleted");
+      }
+
+      const branchExists = project.branches.some((item) => item.id === branchId);
+      if (!branchExists) {
+        throw new Error("Branch not found");
+      }
+
+      project.branches = project.branches.filter((item) => item.id !== branchId);
+      project.chapters = project.chapters.filter((chapter) => chapter.branchId !== branchId);
+    });
+  }
+
   mergeBranch(projectId: string, userId: string, branchId: string) {
     return this.mutate(projectId, userId, 3, "Branch merged", (project) => {
       const branch = project.branches.find((item) => item.id === branchId);
@@ -299,7 +352,13 @@ export class InMemoryProjectRepository {
     });
   }
 
-  addGeneratedChapter(projectId: string, userId: string, branchId: string, payload: GeneratedChapterPayload) {
+  addGeneratedChapter(
+    projectId: string,
+    userId: string,
+    branchId: string,
+    payload: GeneratedChapterPayload,
+    aiContext: ChapterAIContextSnapshot,
+  ) {
     return this.mutate(projectId, userId, 2, `Chapter added: ${payload.title}`, (project) => {
       const nextIndex = project.chapters.length + 1;
       project.chapters.push({
@@ -309,6 +368,8 @@ export class InMemoryProjectRepository {
         content: payload.content,
         branchId,
         index: nextIndex,
+        source: "ai",
+        aiContext,
         createdAt: new Date().toISOString(),
       });
 
@@ -329,6 +390,17 @@ export class InMemoryProjectRepository {
       chapter.title = title;
       chapter.content = content;
       chapter.summary = summary;
+    });
+  }
+
+  deleteChapter(projectId: string, userId: string, chapterId: string) {
+    return this.mutate(projectId, userId, 2, "Chapter deleted", (project) => {
+      const chapterExists = project.chapters.some((item) => item.id === chapterId);
+      if (!chapterExists) {
+        throw new Error("Chapter not found");
+      }
+
+      project.chapters = project.chapters.filter((item) => item.id !== chapterId);
     });
   }
 
@@ -596,6 +668,7 @@ export class InMemoryProjectRepository {
       metadata: {
         ...project.metadata,
         isPublic: Boolean(project.metadata.isPublic),
+        coverImageUrl: project.metadata.coverImageUrl || undefined,
       },
       activeUsers: project.activeUsers ?? [],
       chatMessages: project.chatMessages ?? [],

@@ -21,6 +21,8 @@ export class AIClient {
         chapter_title: request.input.title,
         instructions: request.input.instructions,
         branch_name: request.context.branchName,
+        branch_description: request.context.branchDescription,
+        branch_highlights: request.context.branchHighlights,
         tone: request.context.tone,
         audience: request.context.audience,
         shared_notes: request.context.sharedNotes,
@@ -44,25 +46,5 @@ export class AIClient {
       costUsd: data.costUsd,
       model: data.model,
     };
-  }
-
-  async synthesizeSpeech(text: string, language: "vi" | "en"): Promise<Buffer> {
-    const response = await fetch(`${this.baseUrl}/tts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text,
-        language,
-      }),
-    });
-
-    if (!response.ok) {
-      const message = await response.text();
-      throw new Error(message || `AI service returned ${response.status}`);
-    }
-
-    return Buffer.from(await response.arrayBuffer());
   }
 }

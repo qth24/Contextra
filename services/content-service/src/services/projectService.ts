@@ -1,5 +1,6 @@
 import {
   AddCollaboratorInput,
+  CreateChapterInput,
   CreateBranchInput,
   CreateProjectInput,
   GenerateChapterInput,
@@ -8,6 +9,7 @@ import {
   ProjectPresenceInput,
   PublicUser,
   UpdateContextInput,
+  UpdateProjectSettingsInput,
   UpdateProjectVisibilityInput,
   UpsertCharacterInput,
 } from "../types/models";
@@ -48,6 +50,10 @@ export class ProjectService {
     return this.repository.updateVisibility(projectId, userId, input);
   }
 
+  updateSettings(projectId: string, userId: string, input: UpdateProjectSettingsInput) {
+    return this.repository.updateSettings(projectId, userId, input);
+  }
+
   async addCollaborator(projectId: string, userId: string, input: AddCollaboratorInput, collaboratorId?: string) {
     const user = await this.authRepository.getPublicUserById(input.friendUserId);
     if (!user) {
@@ -82,12 +88,24 @@ export class ProjectService {
     return this.repository.addBranch(projectId, userId, input);
   }
 
+  deleteBranch(projectId: string, userId: string, branchId: string) {
+    return this.repository.deleteBranch(projectId, userId, branchId);
+  }
+
   mergeBranch(projectId: string, userId: string, branchId: string) {
     return this.repository.mergeBranch(projectId, userId, branchId);
   }
 
   updateChapter(projectId: string, userId: string, chapterId: string, title: string, content: string, summary: string) {
     return this.repository.updateChapter(projectId, userId, chapterId, title, content, summary);
+  }
+
+  createChapter(projectId: string, userId: string, input: CreateChapterInput) {
+    return this.repository.createChapter(projectId, userId, input);
+  }
+
+  deleteChapter(projectId: string, userId: string, chapterId: string) {
+    return this.repository.deleteChapter(projectId, userId, chapterId);
   }
 
   updatePresence(projectId: string, user: PublicUser, input: ProjectPresenceInput) {
@@ -108,9 +126,23 @@ export class ProjectService {
       return null;
     }
 
+    if (!project.branches.some((branch) => branch.id === input.branchId)) {
+      throw new Error("Branch not found");
+    }
+
+    if (!String(input.instructions || "").trim()) {
+      throw new Error("Generation instructions are required");
+    }
+
     const context = this.contextService.compose(project, input.branchId);
     const generated = await this.aiClient.generateChapter({ input, context });
-    const updatedProject = await this.repository.addGeneratedChapter(projectId, userId, input.branchId, generated);
+    const updatedProject = await this.repository.addGeneratedChapter(
+      projectId,
+      userId,
+      input.branchId,
+      generated,
+      this.contextService.snapshotForGeneratedChapter(context, input, generated.model),
+    );
 
     if (!updatedProject) {
       return null;
@@ -137,9 +169,5 @@ export class ProjectService {
 
       return this.contextService.exportProject(project);
     });
-  }
-
-  synthesizeSpeech(text: string, language: "vi" | "en") {
-    return this.aiClient.synthesizeSpeech(text, language);
   }
 }

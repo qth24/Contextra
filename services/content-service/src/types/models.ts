@@ -78,6 +78,7 @@ export interface ProjectMetadata {
   genre: string;
   summary: string;
   isPublic: boolean;
+  coverImageUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,10 +93,25 @@ export interface CharacterProfile {
   id: string;
   name: string;
   role: string;
-  goals: string;
-  traits: string[];
   memory: string;
+  goals?: string;
+  traits?: string[];
   updatedAt: string;
+}
+
+export interface ChapterAIContextSnapshot {
+  branchName: string;
+  projectSummary: string;
+  tone: string;
+  audience: string;
+  sharedNotes: string;
+  worldRules: string[];
+  characterDigest: string;
+  recentChapters: string[];
+  instructions: string;
+  actor: string;
+  model?: string;
+  generatedAt: string;
 }
 
 export interface Chapter {
@@ -105,6 +121,8 @@ export interface Chapter {
   branchId: string;
   summary: string;
   content: string;
+  source?: "manual" | "ai";
+  aiContext?: ChapterAIContextSnapshot;
   createdAt: string;
 }
 
@@ -196,10 +214,17 @@ export interface CreateProjectInput {
   mode: ProjectMode;
   genre: string;
   summary: string;
+  coverImageUrl?: string;
 }
 
 export interface UpdateProjectVisibilityInput {
   isPublic: boolean;
+}
+
+export interface UpdateProjectSettingsInput {
+  mode: ProjectMode;
+  isPublic: boolean;
+  coverImageUrl?: string;
 }
 
 export interface AddCollaboratorInput {
@@ -232,9 +257,9 @@ export interface ProjectChatInput {
 export interface UpsertCharacterInput {
   name: string;
   role: string;
-  goals: string;
-  traits: string[];
   memory: string;
+  goals?: string;
+  traits?: string[];
 }
 
 export interface UpdateContextInput {
@@ -257,6 +282,13 @@ export interface GenerateChapterInput {
   actor: string;
 }
 
+export interface CreateChapterInput {
+  title: string;
+  branchId: string;
+  content: string;
+  summary: string;
+}
+
 export interface GeneratedChapterPayload {
   title: string;
   summary: string;
@@ -274,6 +306,7 @@ export interface HomeOverview {
     genre: string;
     updatedAt: string;
     isPublic: boolean;
+    coverImageUrl?: string;
   }>;
   publicProjects: Array<{
     id: string;
@@ -282,6 +315,7 @@ export interface HomeOverview {
     genre: string;
     ownerName: string;
     updatedAt: string;
+    coverImageUrl?: string;
   }>;
 }
 

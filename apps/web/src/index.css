@@ -55,18 +55,123 @@ select {
   font-family: "Space Grotesk", sans-serif;
 }
 
-.editor-markdown {
-  color: #334155;
+.app-font-georgia {
+  font-family: Georgia, serif;
 }
 
-.editor-markdown h1,
-.editor-markdown h2,
-.editor-markdown h3 {
-  text-wrap: balance;
+.app-font-verdana {
+  font-family: Verdana, Geneva, sans-serif;
 }
 
-.editor-markdown p,
-.editor-markdown li,
-.editor-markdown blockquote {
-  word-break: break-word;
+.app-font-trebuchet {
+  font-family: "Trebuchet MS", sans-serif;
+}
+
+.app-font-courier {
+  font-family: "Courier New", monospace;
+}
+
+.editor-surface:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+}
+
+.editor-surface p {
+  margin: 0 0 0.9rem;
+}
+
+.editor-surface ul,
+.editor-surface ol {
+  margin: 0 0 1rem;
+  padding-left: 1.6rem;
+}
+
+.editor-surface ul {
+  list-style: disc;
+}
+
+.editor-surface ol {
+  list-style: decimal;
+}
+
+.editor-surface li {
+  margin-bottom: 0.35rem;
+}
+
+.editor-surface img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem 0;
+  border-radius: 1rem;
+}
+
+.editor-image-wrap {
+  position: relative;
+  display: block;
+  width: min(100%, 420px);
+  min-width: 120px;
+  min-height: 120px;
+  max-width: 100%;
+  margin: 1rem 0;
+  overflow: hidden;
+  resize: both;
+  border-radius: 1rem;
+  background: #e2e8f0;
+}
+
+.editor-image-wrap img {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  object-fit: cover;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.editor-image-wrap.is-cropping {
+  outline: 2px solid #2563eb;
+}
+
+.editor-image-wrap.is-cropping img {
+  cursor: grabbing;
+}
+
+.editor-table-wrap {
+  width: min(100%, 100%);
+  min-width: 360px;
+  min-height: 140px;
+  max-width: 100%;
+  margin: 1rem 0;
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.editor-table-wrap table {
+  margin: 0;
+  height: 100%;
+}
+
+.editor-surface table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.editor-surface th,
+.editor-surface td {
+  border: 1px solid #cbd5e1;
+  padding: 0.75rem;
+  vertical-align: top;
+  min-width: 120px;
+  min-height: 56px;
+  overflow: hidden;
+}
+
+.editor-surface th {
+  background: #f8fafc;
+  font-weight: 700;
 }

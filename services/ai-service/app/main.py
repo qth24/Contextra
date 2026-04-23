@@ -1,27 +1,36 @@
 import os
-from io import BytesIO
 from textwrap import dedent
 
-import edge_tts
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from fastapi.responses import StreamingResponse
-from gtts import gTTS
 
-from .schemas import GenerateRequest, GenerateResponse, TTSRequest
+from .schemas import GenerateRequest, GenerateResponse, ModelChapterResponse
 
 app = FastAPI(title="Contextra AI Service")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
-EDGE_TTS_VOICES = {
-    "vi": "vi-VN-HoaiMyNeural",
-    "en": "en-US-JennyNeural",
-}
+INPUT_COST_PER_1K_TOKENS = float(os.getenv("GEMINI_INPUT_COST_PER_1K_TOKENS", "0") or "0")
+OUTPUT_COST_PER_1K_TOKENS = float(os.getenv("GEMINI_OUTPUT_COST_PER_1K_TOKENS", "0") or "0")
 
 
 def build_prompt(payload: GenerateRequest) -> str:
+    world_rules = (
+        "\n- ".join(payload.world_rules)
+        if payload.world_rules
+        else "No world rules yet."
+    )
+    recent_chapters = (
+        "\n".join(payload.recent_chapters)
+        if payload.recent_chapters
+        else "No previous chapters."
+    )
+    branch_highlights = (
+        "\n- ".join(payload.branch_highlights)
+        if payload.branch_highlights
+        else "No branch highlights yet."
+    )
     return dedent(
         f"""
         You are an expert long-form writing assistant.
@@ -29,29 +38,34 @@ def build_prompt(payload: GenerateRequest) -> str:
         Project: {payload.project_name}
         Project summary: {payload.project_summary}
         Branch: {payload.branch_name}
+        Branch description: {payload.branch_description}
+        Branch highlights:
+        - {branch_highlights}
         Audience: {payload.audience}
         Tone: {payload.tone}
         Shared notes: {payload.shared_notes}
         World rules:
-        - {"\n- ".join(payload.world_rules) if payload.world_rules else "No world rules yet."}
+        - {world_rules}
 
         Character digest:
         {payload.character_digest}
 
         Recent continuity:
-        {"\n".join(payload.recent_chapters) if payload.recent_chapters else "No previous chapters."}
+        {recent_chapters}
 
         Requested chapter title: {payload.chapter_title}
         Instructions:
         {payload.instructions}
 
-        Return a concise JSON object with:
+        Return only valid JSON with:
         - title
         - summary
         - content
-        - tokens
-        - cost_usd
-        - model
+
+        Requirements:
+        - Keep continuity strictly aligned with the supplied branch.
+        - Do not invent branch history outside the provided continuity.
+        - content must be clean HTML using paragraphs and simple inline tags when needed.
         """
     ).strip()
 
@@ -85,7 +99,21 @@ async def call_gemini(payload: GenerateRequest) -> GenerateResponse:
 
     parts = data["candidates"][0]["content"]["parts"]
     raw_text = "".join(part.get("text", "") for part in parts).strip()
-    return GenerateResponse.model_validate_json(raw_text)
+    chapter = ModelChapterResponse.model_validate_json(raw_text)
+    usage = data.get("usageMetadata", {})
+    prompt_tokens = int(usage.get("promptTokenCount", 0) or 0)
+    candidate_tokens = int(usage.get("candidatesTokenCount", 0) or 0)
+    total_tokens = int(usage.get("totalTokenCount", prompt_tokens + candidate_tokens) or 0)
+    cost_usd = ((prompt_tokens / 1000) * INPUT_COST_PER_1K_TOKENS) + ((candidate_tokens / 1000) * OUTPUT_COST_PER_1K_TOKENS)
+
+    return GenerateResponse(
+        title=chapter.title,
+        summary=chapter.summary,
+        content=chapter.content,
+        tokens=total_tokens,
+        cost_usd=round(cost_usd, 6),
+        model=str(data.get("modelVersion") or GEMINI_MODEL),
+    )
 
 def serialize_response(result: GenerateResponse) -> dict:
     return {
@@ -96,27 +124,6 @@ def serialize_response(result: GenerateResponse) -> dict:
         "costUsd": result.cost_usd,
         "model": result.model,
     }
-
-
-async def build_tts_audio(text: str, language: str) -> BytesIO:
-    normalized_language = "vi" if language.lower().startswith("vi") else "en"
-    audio_stream = BytesIO()
-
-    try:
-        voice = EDGE_TTS_VOICES[normalized_language]
-        communicate = edge_tts.Communicate(text=text, voice=voice)
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_stream.write(chunk["data"])
-        audio_stream.seek(0)
-        if audio_stream.getbuffer().nbytes > 0:
-            return audio_stream
-    except Exception:
-        audio_stream = BytesIO()
-
-    gTTS(text=text, lang=normalized_language, slow=False).write_to_fp(audio_stream)
-    audio_stream.seek(0)
-    return audio_stream
 
 
 @app.get("/health")
@@ -139,15 +146,3 @@ async def generate(payload: GenerateRequest):
         return JSONResponse(content=serialize_response(result))
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Gemini request failed: {error}") from error
-
-
-@app.post("/tts")
-async def text_to_speech(payload: TTSRequest):
-    if not payload.text.strip():
-        raise HTTPException(status_code=400, detail="Text is required for TTS")
-
-    try:
-        audio_stream = await build_tts_audio(payload.text.strip(), payload.language)
-        return StreamingResponse(audio_stream, media_type="audio/mpeg")
-    except Exception as error:
-        raise HTTPException(status_code=502, detail=f"TTS request failed: {error}") from error
