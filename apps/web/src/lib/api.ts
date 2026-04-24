@@ -225,7 +225,7 @@ export interface ProjectChatMessage {
   createdAt: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "contextra_token";
 
 export const authStorage = {
